@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stopwatch</title>
+    <style>
+        body {
+            background: radial-gradient(circle, #1a2a6c, #b21f1f, #fdbb2d);
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            transition: background 0.5s ease-in-out;
+        }
+
+        .watch-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            background: #111;
+            border-radius: 50%;
+            width: 400px;
+            height: 400px;
+            box-shadow: 0 0 50px rgba(255, 255, 255, 0.2), 0 0 20px rgba(0, 0, 0, 0.7) inset;
+            position: relative;
+            overflow: hidden;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin: 10px 0;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px #fff;
+        }
+
+        #time {
+            font-size: 2rem;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-shadow: 0 0 10px #fff;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        button {
+            background: #fdbb2d;
+            color: #333;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s ease, background 0.3s ease;
+        }
+
+        button:hover {
+            transform: scale(1.1);
+            background: #b21f1f;
+            color: white;
+        }
+
+        .footer {
+            position: absolute;
+            bottom: 10px;
+            text-align: center;
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.7);
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+        }
+    
+    .instruction-btn {
+    background-color: #fdbb2d;
+    color: black;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 5px;
+    font-size: 1rem;
+}
+    .instruction-btn:hover {
+    background-color: #1a2a6c;
+    color: white;
+    text-shadow: none;
+}
+#instructions {
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-top: 20px;
+    position: absolute;
+    top: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 600px;
+    display: none;
+}
+        font-family: Arial, sans-serif;
+    line-height: 1.6;
+}
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .current-time {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 1rem;
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.7);
+            color: #fdbb2d;
+            font-weight: bold;
+        }
+
+        .quote {
+            margin-top: 10px;
+            font-size: 1rem;
+            font-style: italic;
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+        }
+
+        .badge {
+            position: absolute;
+            bottom: 70px;
+            background: gold;
+            padding: 10px;
+            border-radius: 20px;
+            font-size: 1rem;
+            color: #333;
+            font-weight: bold;
+            text-shadow: 0 0 10px #fff;
+            display: none;
+        }
+    
+    /* Loading Screen Styling */
+#loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: black;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Arial', sans-serif;
+    z-index: 9999;
+    overflow: hidden;
+}
+
+/* Loader Circle Animation */
+.loader {
+    position: relative;
+    width: 250px;
+    height: 250px;
+}
+
+.loader-circle {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 12px solid rgba(255, 255, 255, 0.3);
+    border-top: 12px solid #fdbb2d;
+    border-radius: 50%;
+    animation: spin 2s linear infinite;
+}
+
+/* Text Inside Loader */
+.loader-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-44%, -48%);
+    text-align: center;
+    font-size: 1.2rem;
+    animation: fadeIn 1.5s ease-in-out;
+}
+
+.loader-text h1 {
+    font-size: 1.6rem;
+    color: #fdbb2d;
+    margin: 0;
+    animation: pulse 1s infinite;
+}
+
+/* Animations */
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+    </style>
+</head>
+<body>
+    
+    <div id="loading-screen">
+  <div class="loader">
+    <div class="loader-text">
+      <p>Designed by</p>
+      <h1>Abhinav Yaduvanshi</h1>
+    </div>
+    <div class="loader-circle"></div>
+  </div>
+</div>
+
+<!-- Stopwatch and other content -->
+<div id="main-content" style="display: none;">
+  <!-- Existing stopwatch content -->
+    
+    
+    <div class="watch-container">
+        <h1>Stopwatch</h1>
+        <div id="time">00 Months 00 Days 00:00:00</div>
+        <div class="controls">
+            <button onclick="startStopwatch()">Start</button>
+            <button onclick="pauseStopwatch()">Pause</button>
+            <button onclick="resetStopwatch()">Reset</button>
+        </div>
+        <div class="quote" id="quote">"Time flies like an arrow; fruit flies like a banana!"</div>
+        <div class="badge" id="badge">Achievement Unlocked!</div>
+    </div>
+    <div class="current-time" id="current-time"></div>
+    
+
+    <div id="authModal" class="modal">
+  <div class="modal-content">
+    <h2 id="authTitle">Login</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="authenticateUser()">Submit</button>
+    <button onclick="toggleAuthMode()">Switch to Register</button>
+  </div>
+</div>
+<div id="instructions" style="display: none;">
+  <div class="instruction-box">
+    <h2>How to Use the Multi-Month Stopwatch</h2>
+    <p>
+      Welcome to the Multi-Month Stopwatch! This stopwatch allows you to track time over months, days, hours, minutes, and seconds.
+      You can start, pause, and reset the timer. Your progress is saved so that even if you change the tab, it will continue when you return!
+    </p>
+    
+    <h3>Using the Stopwatch</h3>
+    <ul>
+      <li><strong>Start:</strong> Click the "Start" button to begin tracking your time.</li>
+      <li><strong>Pause:</strong> Click the "Pause" button to stop the stopwatch while saving your progress.</li>
+      <li><strong>Reset:</strong> Click "Reset" to clear the stopwatch and start fresh.</li>
+    </ul>
+
+    <h3>Creating an Account (Signup)</h3>
+    <p>
+      If you're a new user, you can create an account to save your stopwatch progress and login later. Here's how:
+    </p>
+    <ul>
+      <li>Click the "Signup" button in the login modal.</li>
+      <li>Enter a username and a password (make sure the username is unique).</li>
+      <li>Your account will be saved locally, and you can log in anytime to continue from where you left off.</li>
+    </ul>
+
+    <h3>Logging In</h3>
+    <p>
+      Returning users can log in to access their saved stopwatch data:
+    </p>
+    <ul>
+      <li>Click the "Login" button in the modal.</li>
+      <li>Enter your username and password (the same credentials you used to sign up).</li>
+      <li>Once logged in, your stopwatch data will be restored, and you can resume from where you last left off.</li>
+    </ul>
+
+    <p><strong>Important:</strong> Your data is stored only on your device, and no external server is used. That's why not close the stopwatch tab.'</p>
+  </div>
+</div>
+    <div class="footer">
+<button class="instruction-btn" onclick="toggleInstructions()">Show Instructions</button>
+    </div> 
+</div>
+    <script>
+        let startTime = 0;
+        let elapsedTime = 0;
+        let timerInterval;
+        let running = false;
+
+        function startStopwatch() {
+            if (!running) {
+                startTime = Date.now() - elapsedTime;
+                timerInterval = setInterval(updateTime, 1000);
+                running = true;
+                document.querySelector("button:first-child").textContent = "Pause";
+            } else {
+                pauseStopwatch();
+            }
+        }
+
+        function pauseStopwatch() {
+            clearInterval(timerInterval);
+            running = false;
+            document.querySelector("button:first-child").textContent = "Resume";
+        }
+
+        function resetStopwatch() {
+            clearInterval(timerInterval);
+            running = false;
+            elapsedTime = 0;
+            document.getElementById('time').textContent = "00 Months 00 Days 00:00:00";
+            document.querySelector("button:first-child").textContent = "Start";
+            updateBackground();
+            document.getElementById('badge').style.display = 'none';
+        }
+
+        function updateTime() {
+            elapsedTime = Date.now() - startTime;
+            document.getElementById('time').textContent = formatTime(elapsedTime);
+            checkAchievements();
+            updateBackground();
+        }
+
+        function formatTime(ms) {
+            let seconds = Math.floor(ms / 1000);
+            let minutes = Math.floor(seconds / 60);
+            let hours = Math.floor(minutes / 60);
+            let days = Math.floor(hours / 24);
+            let months = Math.floor(days / 30);
+
+            days = days % 30;
+            hours = hours % 24;
+            minutes = minutes % 60;
+            seconds = seconds % 60;
+
+            return `${pad(months)} Months ${pad(days)} Days ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+        }
+
+        function pad(value) {
+            return value < 10 ? `0${value}` : value;
+        }
+
+        function checkAchievements() {
+            const badge = document.getElementById('badge');
+            if (elapsedTime >= 3600000 && elapsedTime < 86400000) { // 1 hour
+                badge.textContent = "Achievement Unlocked: Time Tamer!";
+                badge.style.display = 'block';
+            } else if (elapsedTime >= 86400000) { // 1 day
+                badge.textContent = "Achievement Unlocked: Marathon Master!";
+                badge.style.display = 'block';
+            } else if (elapsedTime >= 2592000000) { // 1 month
+                badge.textContent = "Achievement Unlocked: Eternal Watcher!";
+                badge.style.display = 'block';
+            }
+        }
+
+        function updateBackground() {
+            if (elapsedTime < 300000) { // < 5 minutes
+                document.body.style.background = "radial-gradient(circle, #1a2a6c, #1e90ff)";
+            } else if (elapsedTime < 1800000) { // 5-30 minutes
+                document.body.style.background = "radial-gradient(circle, #ff4500, #ff6347)";
+            } else { // > 30 minutes
+                document.body.style.background = "radial-gradient(circle, #8b0000, #ff0000)";
+            }
+        }
+
+        function updateQuote() {
+            const quotes = [
+                "Time flies like an arrow; fruit flies like a banana!",
+                "Don't watch the clock. Do what it does: Keep going.",
+                "Lost time is never found again.",
+                "You may delay, but time will not."
+            ];
+            const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
+            document.getElementById('quote').textContent = `"${randomQuote}"`;
+        }
+
+        function updateCurrentTime() {
+            const now = new Date();
+            const options = { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            const currentTime = now.toLocaleTimeString('en-US', options);
+            document.getElementById('current-time').textContent = `Current Time: ${currentTime}`;
+        }
+
+        setInterval(updateCurrentTime, 1000);
+        setInterval(updateQuote, 15000);
+        updateCurrentTime();
+        updateQuote();
+    
+    function updateBackground() {
+    // Remove dynamic background logic and keep the default gradient
+    document.body.style.background = "radial-gradient(circle, #1a2a6c, #b21f1f, #fdbb2d)";
+}
+    
+    
+    let currentUser = null;
+
+// Toggle between Login and Register
+function toggleAuthMode() {
+    const title = document.getElementById("authTitle");
+    title.textContent = title.textContent === "Login" ? "Register" : "Login";
+}
+
+// Authenticate User
+function authenticateUser() {
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+
+    let users = JSON.parse(localStorage.getItem("users")) || {};
+
+    if (document.getElementById("authTitle").textContent === "Login") {
+        // Login
+        if (users[username] && users[username].password === password) {
+            currentUser = username;
+            loadStopwatchData();
+            document.getElementById("authModal").style.display = "none";
+        } else {
+            alert("Invalid username or password!");
+        }
+    } else {
+        // Register
+        if (!users[username]) {
+            users[username] = { password: password, stopwatch: null };
+            localStorage.setItem("users", JSON.stringify(users));
+            alert("Account created! Please log in.");
+        } else {
+            alert("Username already exists!");
+        }
+    }
+}
+
+// Save Stopwatch State
+function saveStopwatchState() {
+    if (currentUser) {
+        let users = JSON.parse(localStorage.getItem("users"));
+        users[currentUser].stopwatch = {
+            startTime: startTime,
+            elapsedTime: elapsedTime,
+            running: running
+        };
+        localStorage.setItem("users", JSON.stringify(users));
+    }
+}
+
+// Load Stopwatch Data on Login
+function loadStopwatchData() {
+    let users = JSON.parse(localStorage.getItem("users"));
+    let data = users[currentUser].stopwatch;
+
+    if (data) {
+        startTime = data.startTime;
+        elapsedTime = data.elapsedTime;
+        running = data.running;
+
+        if (running) {
+            timerInterval = setInterval(updateTime, 1000);
+        }
+        updateTime();
+    }
+}
+
+// Update Save Stopwatch on Start/Stop/Reset
+function startStopwatch() {
+    if (!running) {
+        startTime = Date.now() - elapsedTime;
+        timerInterval = setInterval(updateTime, 1000);
+        running = true;
+        saveStopwatchState(); // Save state
+    }
+}
+
+function pauseStopwatch() {
+    if (running) {
+        clearInterval(timerInterval);
+        running = false;
+        saveStopwatchState(); // Save state
+    }
+}
+
+function resetStopwatch() {
+    clearInterval(timerInterval);
+    running = false;
+    elapsedTime = 0;
+    document.getElementById('time').textContent = "00 Months 00 Days 00:00:00";
+    saveStopwatchState(); // Save state
+}
+    
+    // Function to toggle the visibility of instructions
+function toggleInstructions() {
+    const instructions = document.getElementById('instructions');
+    instructions.style.display = instructions.style.display === 'none' ? 'block' : 'none';
+}
+    
+    // Show loading animation
+window.addEventListener('load', () => {
+    const loadingScreen = document.getElementById('loading-screen');
+    const mainContent = document.getElementById('main-content');
+
+    // Simulate loading delay
+    setTimeout(() => {
+        loadingScreen.style.display = 'none';
+        mainContent.style.display = 'block';
+    }, 2000); // Adjust this to control how long the loading screen appears
+});
+    </script>    
+</body>
+</html>
