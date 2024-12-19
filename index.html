@@ -270,7 +270,7 @@
     <input type="text" id="username" placeholder="Username">
     <input type="password" id="password" placeholder="Password">
     <button onclick="authenticateUser()">Submit</button>
-    <button onclick="toggleAuthMode()">Switch to Register</button>
+      <button id="authButton" onclick="toggleAuthMode()">Switch to Register</button>
   </div>
 </div>
 <div id="instructions" style="display: none;">
@@ -430,10 +430,18 @@
     let currentUser = null;
 
 // Toggle between Login and Register
-function toggleAuthMode() {
-    const title = document.getElementById("authTitle");
-    title.textContent = title.textContent === "Login" ? "Register" : "Login";
-}
+      function toggleAuthMode() {
+            const title = document.getElementById("authTitle");
+            const button = document.getElementById("authButton");
+
+            if (title.textContent === "Login") {
+                title.textContent = "Register";
+                button.textContent = "Switch to Login";
+            } else {
+                title.textContent = "Login";
+                button.textContent = "Switch to Register";
+            }
+      }
 
 // Authenticate User
 function authenticateUser() {
