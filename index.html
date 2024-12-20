@@ -387,17 +387,7 @@
                 badge.style.display = 'block';
             }
         }
-
-        function updateBackground() {
-            if (elapsedTime < 300000) { // < 5 minutes
-                document.body.style.background = "radial-gradient(circle, #1a2a6c, #1e90ff)";
-            } else if (elapsedTime < 1800000) { // 5-30 minutes
-                document.body.style.background = "radial-gradient(circle, #ff4500, #ff6347)";
-            } else { // > 30 minutes
-                document.body.style.background = "radial-gradient(circle, #8b0000, #ff0000)";
-            }
-        }
-
+        
         function updateQuote() {
             const quotes = [
                 "Time flies like an arrow; fruit flies like a banana!",
