@@ -53,15 +53,12 @@ Contributions are welcome! Please follow these steps:
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Contact
 
-For any questions or feedback, please reach out to [abhiyaduvanshi1011@gmail.com].
+For any questions or feedback, please reach out to abhiyaduvanshi1011@gmail.com.
 
 ---
 
 *This project is maintained by Abhi10112006.*
-```
-
-Feel free to copy and paste this into your README section. You can also customize the contact information and any other details as needed.
