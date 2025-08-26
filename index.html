@@ -1,539 +1,524 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stopwatch</title>
-    <style>
-        body {
-            background: radial-gradient(circle, #1a2a6c, #b21f1f, #fdbb2d);
-            font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            color: white;
-            transition: background 0.5s ease-in-out;
-        }
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, setDoc, onSnapshot, getDoc } from 'firebase/firestore';
 
-        .watch-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            background: #111;
-            border-radius: 50%;
-            width: 400px;
-            height: 400px;
-            box-shadow: 0 0 50px rgba(255, 255, 255, 0.2), 0 0 20px rgba(0, 0, 0, 0.7) inset;
-            position: relative;
-            overflow: hidden;
-        }
+// Main App Component for the Quantum Time Tracker
+const App = () => {
+  // Define Firebase configuration and app ID from global variables
+  const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+  const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-        h1 {
-            font-size: 1.5rem;
-            margin: 10px 0;
-            text-transform: uppercase;
-            text-shadow: 0 0 10px #fff;
-        }
+  // State variables for the application
+  const [time, setTime] = useState('00 Cycles 00 Days 00:00:00');
+  const [running, setRunning] = useState(false);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [userId, setUserId] = useState(null);
+  
+  // State to manage which page is currently displayed
+  const [currentPage, setCurrentPage] = useState('tracker');
+  
+  // State variables for the AI Assistant (JARVIS)
+  const [prompt, setPrompt] = useState('');
+  const [chatHistory, setChatHistory] = useState([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
-        #time {
-            font-size: 2rem;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 20px;
-            border-radius: 10px;
-            margin: 20px 0;
-            text-shadow: 0 0 10px #fff;
-        }
+  // Refs to hold Firebase instances and the timer interval ID
+  const dbRef = useRef(null);
+  const authRef = useRef(null);
+  const userDocRef = useRef(null);
+  const timerIntervalRef = useRef(null);
+  const chatEndRef = useRef(null); // Ref to scroll to the bottom of the chat
 
-        .controls {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        button {
-            background: #fdbb2d;
-            color: #333;
-            border: none;
-            padding: 10px 20px;
-            font-size: 1rem;
-            font-weight: bold;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: transform 0.2s ease, background 0.3s ease;
-        }
-
-        button:hover {
-            transform: scale(1.1);
-            background: #b21f1f;
-            color: white;
-        }
-
-        .footer {
-            position: absolute;
-            bottom: 10px;
-            text-align: center;
-            font-size: 1rem;
-            color: rgba(255, 255, 255, 0.7);
-            text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
-        }
-    
-    .instruction-btn {
-    background-color: #fdbb2d;
-    color: black;
-    border: none;
-    padding: 5px 10px;
-    cursor: pointer;
-    border-radius: 5px;
-    font-size: 1rem;
-}
-    .instruction-btn:hover {
-    background-color: #1a2a6c;
-    color: white;
-    text-shadow: none;
-}
-#instructions {
-    background-color: rgba(0, 0, 0, 0.7);
-    color: white;
-    padding: 20px;
-    border-radius: 8px;
-    margin-top: 20px;
-    position: absolute;
-    top: 100px;
-    left: 50%;
-    transform: translateX(-50%);
-    max-width: 600px;
-    display: none;
-}
-        font-family: Arial, sans-serif;
-    line-height: 1.6;
-}
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
-        }
-
-        .current-time {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.6);
-            padding: 10px;
-            border-radius: 10px;
-            font-size: 1rem;
-            text-shadow: 0 0 5px rgba(255, 255, 255, 0.7);
-            color: #fdbb2d;
-            font-weight: bold;
-        }
-
-        .quote {
-            margin-top: 10px;
-            font-size: 1rem;
-            font-style: italic;
-            text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
-        }
-
-        .badge {
-            position: absolute;
-            bottom: 70px;
-            background: gold;
-            padding: 10px;
-            border-radius: 20px;
-            font-size: 1rem;
-            color: #333;
-            font-weight: bold;
-            text-shadow: 0 0 10px #fff;
-            display: none;
-        }
-    
-    /* Loading Screen Styling */
-#loading-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: black;
-    color: white;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Arial', sans-serif;
-    z-index: 9999;
-    overflow: hidden;
-}
-
-/* Loader Circle Animation */
-.loader {
-    position: relative;
-    width: 250px;
-    height: 250px;
-}
-
-.loader-circle {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border: 12px solid rgba(255, 255, 255, 0.3);
-    border-top: 12px solid #fdbb2d;
-    border-radius: 50%;
-    animation: spin 2s linear infinite;
-}
-
-/* Text Inside Loader */
-.loader-text {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-44%, -48%);
-    text-align: center;
-    font-size: 1.2rem;
-    animation: fadeIn 1.5s ease-in-out;
-}
-
-.loader-text h1 {
-    font-size: 1.6rem;
-    color: #fdbb2d;
-    margin: 0;
-    animation: pulse 1s infinite;
-}
-
-/* Animations */
-@keyframes spin {
-    0% {
-        transform: rotate(0deg);
+  // Scroll to the bottom of the chat when new messages are added
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-    100% {
-        transform: rotate(360deg);
-    }
-}
+  }, [chatHistory]);
 
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
+  // Effect hook for initializing Firebase and handling authentication
+  useEffect(() => {
+    const initFirebase = async () => {
+      try {
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        dbRef.current = db;
+        authRef.current = auth;
 
-@keyframes pulse {
-    0%, 100% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.1);
-    }
-}
-    </style>
-</head>
-<body>
-    
-    <div id="loading-screen">
-  <div class="loader">
-    <div class="loader-text">
-      <p>Designed by</p>
-      <h1>Abhinav Yaduvanshi</h1>
-    </div>
-    <div class="loader-circle"></div>
-  </div>
-</div>
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            setUserId(user.uid);
+            setIsAuthReady(true);
+          } else {
+            await signInAnonymously(auth);
+          }
+        });
 
-<!-- Stopwatch and other content -->
-<div id="main-content" style="display: none;">
-  <!-- Existing stopwatch content -->
-    
-    
-    <div class="watch-container">
-        <h1>Stopwatch</h1>
-        <div id="time">00 Months 00 Days 00:00:00</div>
-        <div class="controls">
-            <button onclick="startStopwatch()">Start</button>
-            <button onclick="pauseStopwatch()">Pause</button>
-            <button onclick="resetStopwatch()">Reset</button>
-        </div>
-        <div class="quote" id="quote">"Time flies like an arrow; fruit flies like a banana!"</div>
-        <div class="badge" id="badge">Achievement Unlocked!</div>
-    </div>
-    <div class="current-time" id="current-time"></div>
-    
-
-    <div id="authModal" class="modal">
-  <div class="modal-content">
-    <h2 id="authTitle">Login</h2>
-    <input type="text" id="username" placeholder="Username">
-    <input type="password" id="password" placeholder="Password">
-    <button onclick="authenticateUser()">Submit</button>
-      <button id="authButton" onclick="toggleAuthMode()">Switch to Register</button>
-  </div>
-</div>
-<div id="instructions" style="display: none;">
-  <div class="instruction-box">
-    <h2>How to Use the Multi-Month Stopwatch</h2>
-    <p>
-      Welcome to the Multi-Month Stopwatch! This stopwatch allows you to track time over months, days, hours, minutes, and seconds.
-      You can start, pause, and reset the timer. Your progress is saved so that even if you change the tab, it will continue when you return!
-    </p>
-    
-    <h3>Using the Stopwatch</h3>
-    <ul>
-      <li><strong>Start:</strong> Click the "Start" button to begin tracking your time.</li>
-      <li><strong>Pause:</strong> Click the "Pause" button to stop the stopwatch while saving your progress.</li>
-      <li><strong>Reset:</strong> Click "Reset" to clear the stopwatch and start fresh.</li>
-    </ul>
-
-    <h3>Creating an Account (Signup)</h3>
-    <p>
-      If you're a new user, you can create an account to save your stopwatch progress and login later. Here's how:
-    </p>
-    <ul>
-      <li>Click the "Signup" button in the login modal.</li>
-      <li>Enter a username and a password (make sure the username is unique).</li>
-      <li>Your account will be saved locally, and you can log in anytime to continue from where you left off.</li>
-    </ul>
-
-    <h3>Logging In</h3>
-    <p>
-      Returning users can log in to access their saved stopwatch data:
-    </p>
-    <ul>
-      <li>Click the "Login" button in the modal.</li>
-      <li>Enter your username and password (the same credentials you used to sign up).</li>
-      <li>Once logged in, your stopwatch data will be restored, and you can resume from where you last left off.</li>
-    </ul>
-
-    <p><strong>Important:</strong> Your data is stored only on your device, and no external server is used.</p>
-  </div>
-</div>
-    <div class="footer">
-<button class="instruction-btn" onclick="toggleInstructions()">Show Instructions</button>
-    </div> 
-</div>
-    <script>
-        let startTime = 0;
-        let elapsedTime = 0;
-        let timerInterval;
-        let running = false;
-
-        function startStopwatch() {
-            if (!running) {
-                startTime = Date.now() - elapsedTime;
-                timerInterval = setInterval(updateTime, 1000);
-                running = true;
-                document.querySelector("button:first-child").textContent = "Pause";
-            } else {
-                pauseStopwatch();
-            }
-        }
-
-        function pauseStopwatch() {
-            clearInterval(timerInterval);
-            running = false;
-            document.querySelector("button:first-child").textContent = "Resume";
-        }
-
-        function resetStopwatch() {
-            clearInterval(timerInterval);
-            running = false;
-            elapsedTime = 0;
-            document.getElementById('time').textContent = "00 Months 00 Days 00:00:00";
-            document.querySelector("button:first-child").textContent = "Start";
-            updateBackground();
-            document.getElementById('badge').style.display = 'none';
-        }
-
-        function updateTime() {
-            elapsedTime = Date.now() - startTime;
-            document.getElementById('time').textContent = formatTime(elapsedTime);
-            checkAchievements();
-            updateBackground();
-        }
-
-        function formatTime(ms) {
-            let seconds = Math.floor(ms / 1000);
-            let minutes = Math.floor(seconds / 60);
-            let hours = Math.floor(minutes / 60);
-            let days = Math.floor(hours / 24);
-            let months = Math.floor(days / 30);
-
-            days = days % 30;
-            hours = hours % 24;
-            minutes = minutes % 60;
-            seconds = seconds % 60;
-
-            return `${pad(months)} Months ${pad(days)} Days ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-        }
-
-        function pad(value) {
-            return value < 10 ? `0${value}` : value;
-        }
-
-        function checkAchievements() {
-            const badge = document.getElementById('badge');
-            if (elapsedTime >= 3600000 && elapsedTime < 86400000) { // 1 hour
-                badge.textContent = "Achievement Unlocked: Time Tamer!";
-                badge.style.display = 'block';
-            } else if (elapsedTime >= 86400000) { // 1 day
-                badge.textContent = "Achievement Unlocked: Marathon Master!";
-                badge.style.display = 'block';
-            } else if (elapsedTime >= 2592000000) { // 1 month
-                badge.textContent = "Achievement Unlocked: Eternal Watcher!";
-                badge.style.display = 'block';
-            }
+        if (initialAuthToken) {
+          await signInWithCustomToken(auth, initialAuthToken);
         }
         
-        function updateQuote() {
-            const quotes = [
-                "Time flies like an arrow; fruit flies like a banana!",
-                "Don't watch the clock. Do what it does: Keep going.",
-                "Lost time is never found again.",
-                "You may delay, but time will not."
-            ];
-            const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
-            document.getElementById('quote').textContent = `"${randomQuote}"`;
+        return () => unsubscribe();
+      } catch (error) {
+        console.error("Firebase Initialization Error:", error);
+      }
+    };
+    initFirebase();
+  }, [firebaseConfig, initialAuthToken]);
+
+  // Effect hook for subscribing to real-time data from Firestore
+  useEffect(() => {
+    if (!isAuthReady || !dbRef.current || !userId) return;
+
+    userDocRef.current = doc(dbRef.current, 'artifacts', appId, 'users', userId, 'quantum-tracker', 'timerState');
+
+    const unsubscribe = onSnapshot(userDocRef.current, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const { startTime, running, totalElapsedOnPause } = data;
+        
+        setRunning(running);
+
+        let currentElapsedTime;
+        if (running) {
+          currentElapsedTime = Date.now() - Number(startTime);
+          startTimerInterval(Number(startTime));
+        } else {
+          currentElapsedTime = Number(totalElapsedOnPause);
+          stopTimerInterval();
         }
 
-        function updateCurrentTime() {
-            const now = new Date();
-            const options = { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' };
-            const currentTime = now.toLocaleTimeString('en-US', options);
-            document.getElementById('current-time').textContent = `Current Time: ${currentTime}`;
-        }
+        updateTimeDisplay(currentElapsedTime);
+      } else {
+        resetTracker();
+      }
+    }, (error) => {
+      console.error("Firestore onSnapshot error:", error);
+    });
 
-        setInterval(updateCurrentTime, 1000);
-        setInterval(updateQuote, 15000);
-        updateCurrentTime();
-        updateQuote();
-    
-    function updateBackground() {
-    // Remove dynamic background logic and keep the default gradient
-    document.body.style.background = "radial-gradient(circle, #1a2a6c, #b21f1f, #fdbb2d)";
-}
-    
-    
-    let currentUser = null;
+    return () => unsubscribe();
+  }, [isAuthReady, userId, appId]);
 
-// Toggle between Login and Register
-      function toggleAuthMode() {
-            const title = document.getElementById("authTitle");
-            const button = document.getElementById("authButton");
+  // Function to start the timer interval
+  const startTimerInterval = (startTime) => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+    timerIntervalRef.current = setInterval(() => {
+      const newElapsedTime = Date.now() - startTime;
+      updateTimeDisplay(newElapsedTime);
+    }, 1000);
+  };
 
-            if (title.textContent === "Login") {
-                title.textContent = "Register";
-                button.textContent = "Switch to Login";
-            } else {
-                title.textContent = "Login";
-                button.textContent = "Switch to Register";
+  // Function to stop the timer interval
+  const stopTimerInterval = () => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+  };
+
+  // Updates the time display string from an elapsed time value
+  const updateTimeDisplay = (elapsedMs) => {
+    let seconds = Math.floor(elapsedMs / 1000);
+    let minutes = Math.floor(seconds / 60);
+    let hours = Math.floor(minutes / 60);
+    let days = Math.floor(hours / 24);
+    let cycles = Math.floor(days / 30);
+
+    days = days % 30;
+    hours = hours % 24;
+    minutes = minutes % 60;
+    seconds = seconds % 60;
+
+    const formattedTime = `${pad(cycles)} Cycles ${pad(days)} Days ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+    setTime(formattedTime);
+  };
+
+  // Pads a number with a leading zero
+  const pad = (value) => value < 10 ? `0${value}` : value;
+
+  // The main handler for the Start/Pause button
+  const toggleTracker = async () => {
+    if (!userDocRef.current) return;
+    
+    try {
+      if (running) {
+        const docSnap = await getDoc(userDocRef.current);
+        const startTime = docSnap.data()?.startTime || Date.now();
+        const currentElapsedTime = Date.now() - Number(startTime);
+
+        await setDoc(userDocRef.current, {
+          running: false,
+          totalElapsedOnPause: currentElapsedTime,
+        }, { merge: true });
+      } else {
+        const docSnap = await getDoc(userDocRef.current);
+        const lastElapsedTime = docSnap.data()?.totalElapsedOnPause || 0;
+        
+        await setDoc(userDocRef.current, {
+          running: true,
+          startTime: Date.now() - lastElapsedTime,
+          totalElapsedOnPause: 0,
+        }, { merge: true });
+      }
+    } catch (error) {
+      console.error("Error toggling tracker state:", error);
+    }
+  };
+  
+  // Handler for the "Reset" button
+  const resetTracker = async () => {
+    if (!userDocRef.current) return;
+    try {
+      await setDoc(userDocRef.current, {
+        startTime: Date.now(),
+        running: false,
+        totalElapsedOnPause: 0,
+      });
+    } catch (error) {
+      console.error("Error resetting tracker:", error);
+    }
+  };
+
+  // --- Gemini API Integration Logic for JARVIS ---
+
+  const getJarvisPersona = () => ({
+    role: 'user',
+    parts: [{ text: "You are JARVIS, a sarcastic, witty, and highly intelligent AI assistant in the style of the one from Iron Man. You are helpful but can also be playfully condescending. Your responses should be as concise as possible while remaining accurate. Use paragraph formatting for easy reading. You can solve complex math, physics, and chemistry problems."}]
+  });
+
+  const askJarvis = async (e) => {
+    e.preventDefault();
+    if (!prompt.trim()) return;
+    
+    setIsGenerating(true);
+    
+    const userMessage = { role: 'user', parts: [{ text: prompt }] };
+    setChatHistory(prevHistory => [...prevHistory, userMessage]);
+    setPrompt('');
+
+    const apiKey = "";
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+    
+    const payload = {
+      contents: [
+        getJarvisPersona(),
+        ...chatHistory,
+        userMessage,
+      ],
+    };
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+      const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (text) {
+        const aiMessage = { role: 'model', parts: [{ text }] };
+        setChatHistory(prevHistory => [...prevHistory, aiMessage]);
+      } else {
+        setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: "Error: My apologies, sir. It appears a module has malfunctioned. Please try again." }] }]);
+      }
+    } catch (error) {
+      console.error("API call failed:", error);
+      setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: "An error occurred. It seems I am temporarily offline. Perhaps you can solve this particular conundrum yourself?" }] }]);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // New function to summarize the conversation
+  const summarizeChat = async () => {
+    if (isSummarizing || chatHistory.length === 0) return;
+    
+    setIsSummarizing(true);
+    
+    const conversationText = chatHistory
+      .map(msg => `${msg.role === 'user' ? 'You' : 'JARVIS'}: ${msg.parts[0].text}`)
+      .join('\n');
+      
+    const promptForSummary = `Based on the following conversation, provide a concise summary of the key topics and answers. Limit the summary to a few bullet points:\n\n${conversationText}`;
+
+    const apiKey = "";
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+    
+    const payload = {
+      contents: [{
+        parts: [{ text: promptForSummary }]
+      }]
+    };
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      const summaryText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (summaryText) {
+        setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: `Summary of our session:\n\n${summaryText}` }] }]);
+      }
+    } catch (error) {
+      console.error("Summary API call failed:", error);
+      setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: "I'm afraid I cannot summarize our conversation at this moment. The data stream seems to be corrupted." }] }]);
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+  
+  // New function to generate and play audio from the last response
+  const speakResponse = async (textToSpeak) => {
+    if (isSpeaking) return;
+    setIsSpeaking(true);
+    
+    const apiKey = "";
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+    
+    const payload = {
+        contents: [{
+            parts: [{ text: `Say with a professional and helpful tone: ${textToSpeak}` }]
+        }],
+        generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+                voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: "Algieba" }
+                }
             }
+        },
+        model: "gemini-2.5-flash-preview-tts"
+    };
+    
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        const part = result?.candidates?.[0]?.content?.parts?.[0];
+        const audioData = part?.inlineData?.data;
+        const mimeType = part?.inlineData?.mimeType;
+
+        if (audioData && mimeType && mimeType.startsWith("audio/")) {
+            const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+            const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000;
+            const pcmData = base64ToArrayBuffer(audioData);
+            const pcm16 = new Int16Array(pcmData);
+            const wavBlob = pcmToWav(pcm16, sampleRate);
+            const audioUrl = URL.createObjectURL(wavBlob);
+            const audio = new Audio(audioUrl);
+            audio.onended = () => setIsSpeaking(false);
+            audio.play();
+        } else {
+            console.error("Audio data is missing or invalid.");
+            setIsSpeaking(false);
+        }
+    } catch (error) {
+        console.error("TTS API call failed:", error);
+        setIsSpeaking(false);
+    }
+  };
+  
+  // Helper function to convert base64 to ArrayBuffer
+  const base64ToArrayBuffer = (base64) => {
+      const binaryString = atob(base64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes.buffer;
+  };
+
+  // Helper function to convert PCM audio data to a WAV file Blob
+  const pcmToWav = (pcmData, sampleRate) => {
+      const dataLength = pcmData.length * 2;
+      const buffer = new ArrayBuffer(44 + dataLength);
+      const view = new DataView(buffer);
+
+      // RIFF identifier
+      writeString(view, 0, 'RIFF');
+      // file length
+      view.setUint32(4, 36 + dataLength, true);
+      // RIFF type
+      writeString(view, 8, 'WAVE');
+      // format chunk identifier
+      writeString(view, 12, 'fmt ');
+      // format chunk length
+      view.setUint32(16, 16, true);
+      // sample format (1 = PCM)
+      view.setUint16(20, 1, true);
+      // channel count
+      view.setUint16(22, 1, true);
+      // sample rate
+      view.setUint32(24, sampleRate, true);
+      // byte rate (sample rate * block align)
+      view.setUint32(28, sampleRate * 2, true);
+      // block align (channels * bytes per sample)
+      view.setUint16(32, 2, true);
+      // bits per sample
+      view.setUint16(34, 16, true);
+      // data chunk identifier
+      writeString(view, 36, 'data');
+      // data chunk length
+      view.setUint32(40, dataLength, true);
+
+      // Write PCM data
+      let offset = 44;
+      for (let i = 0; i < pcmData.length; i++) {
+          view.setInt16(offset, pcmData[i], true);
+          offset += 2;
       }
 
-// Authenticate User
-function authenticateUser() {
-    const username = document.getElementById("username").value;
-    const password = document.getElementById("password").value;
+      return new Blob([view], { type: 'audio/wav' });
+  };
 
-    let users = JSON.parse(localStorage.getItem("users")) || {};
+  const writeString = (view, offset, string) => {
+      for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i));
+      }
+  };
 
-    if (document.getElementById("authTitle").textContent === "Login") {
-        // Login
-        if (users[username] && users[username].password === password) {
-            currentUser = username;
-            loadStopwatchData();
-            document.getElementById("authModal").style.display = "none";
-        } else {
-            alert("Invalid username or password!");
-        }
-    } else {
-        // Register
-        if (!users[username]) {
-            users[username] = { password: password, stopwatch: null };
-            localStorage.setItem("users", JSON.stringify(users));
-            alert("Account created! Please log in.");
-        } else {
-            alert("Username already exists!");
-        }
-    }
-}
+  // Main UI rendering based on the current page state
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-indigo-900 via-purple-900 to-fuchsia-900 text-slate-100 font-sans">
+      {/* Loading state until Firebase auth is ready */}
+      {!isAuthReady ? (
+        <div className="flex flex-col items-center justify-center w-full min-h-screen">
+          <svg className="animate-spin h-16 w-16 text-indigo-400" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <p className="mt-4 text-xl font-bold">Initializing Quantum Core...</p>
+        </div>
+      ) : (
+        <>
+          {/* Tracker Page UI */}
+          {currentPage === 'tracker' && (
+            <div className="relative w-full max-w-xl mx-auto p-6 flex flex-col items-center text-center">
+              <div className="bg-slate-800 bg-opacity-70 p-8 rounded-3xl shadow-2xl flex flex-col items-center w-full transform transition-all duration-500 hover:scale-105">
+                <h1 className="text-3xl font-extrabold tracking-wide mb-6 text-indigo-400">Quantum Time Tracker</h1>
+                <div className="text-4xl sm:text-5xl font-mono p-4 rounded-xl bg-slate-900 bg-opacity-50 border-2 border-indigo-500 border-dashed text-indigo-200 shadow-lg">
+                  {time}
+                </div>
+                <div className="flex flex-col sm:flex-row mt-8 space-y-4 sm:space-y-0 sm:space-x-4 w-full justify-center">
+                  <button
+                    onClick={toggleTracker}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105"
+                  >
+                    {running ? 'Pause' : 'Start'}
+                  </button>
+                  <button
+                    onClick={resetTracker}
+                    className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105"
+                  >
+                    Reset
+                  </button>
+                </div>
+                <button
+                  onClick={() => setCurrentPage('jarvis')}
+                  className="mt-8 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105"
+                >
+                  Launch JARVIS
+                </button>
+                <p className="mt-6 text-sm italic text-gray-400 text-center">
+                  Your unique user ID: <span className="font-bold text-gray-300 break-all">{userId}</span>
+                </p>
+              </div>
+            </div>
+          )}
 
-// Save Stopwatch State
-function saveStopwatchState() {
-    if (currentUser) {
-        let users = JSON.parse(localStorage.getItem("users"));
-        users[currentUser].stopwatch = {
-            startTime: startTime,
-            elapsedTime: elapsedTime,
-            running: running
-        };
-        localStorage.setItem("users", JSON.stringify(users));
-    }
-}
+          {/* JARVIS Page UI */}
+          {currentPage === 'jarvis' && (
+            <div className="relative w-full max-w-2xl mx-auto p-6 flex flex-col items-center text-center bg-slate-800 bg-opacity-70 rounded-3xl shadow-2xl min-h-[90vh] lg:min-h-[80vh]">
+              <button
+                onClick={() => setCurrentPage('tracker')}
+                className="absolute top-4 right-4 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition-all transform hover:scale-105 text-sm"
+              >
+                Return to Tracker
+              </button>
+              <h2 className="text-3xl font-extrabold tracking-wide mb-4 text-purple-400 mt-10">JARVIS</h2>
+              <div className="flex-grow bg-white text-gray-900 p-4 rounded-xl overflow-y-auto mb-4 space-y-4 text-sm w-full min-h-[50vh] shadow-lg">
+                {chatHistory.length === 0 && (
+                  <div className="text-center text-gray-500 italic">
+                    Greetings, sir. How may I be of assistance?
+                  </div>
+                )}
+                {chatHistory.map((msg, index) => (
+                  <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`p-3 rounded-lg max-w-full sm:max-w-md break-words ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-900'}`}>
+                      {msg.parts[0].text}
+                      {msg.role === 'model' && (
+                          <button 
+                              onClick={() => speakResponse(msg.parts[0].text)}
+                              className="ml-2 px-2 py-1 text-xs text-white bg-purple-700 hover:bg-purple-800 rounded-full transition-all"
+                              disabled={isSpeaking}
+                          >
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 inline-block">
+                                  <path d="M11.536 2.455a.75.75 0 01.928 0 4.5 4.5 0 005.479 1.455A4.5 4.5 0 0118 10.5h1.5a.75.75 0 010 1.5H18a3 3 0 00-2.887 2.185.75.75 0 01-.617.562 2.99 2.99 0 00-5.176 1.134.75.75 0 01-.617.561A3 3 0 006 17.25h-1.5a.75.75 0 010-1.5H6a4.5 4.5 0 014.036-5.068A4.502 4.502 0 0011.536 2.455z" />
+                                  <path d="M12.75 17.25a.75.75 0 00-1.5 0v3.75a.75.75 0 001.5 0v-3.75zM17.25 12a.75.75 0 000 1.5h3.75a.75.75 0 000-1.5h-3.75zM11.282 9.043a.75.75 0 00-.91-.128l-3.238 1.942a.75.75 0 00.77 1.28l3.239-1.943a.75.75 0 00.129-.77zM16.597 10.531a.75.75 0 00-1.28.77l1.943 3.239a.75.75 0 00.77-1.28l-1.943-3.239zM8.403 14.719a.75.75 0 00-.77 1.28l1.943 3.239a.75.75 0 00.77-1.28l-1.943-3.239z" />
+                              </svg>
+                          </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {isGenerating && (
+                  <div className="flex justify-start">
+                    <div className="p-3 rounded-lg bg-gray-100 text-gray-900">
+                      <p className="animate-pulse">JARVIS is typing...</p>
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+              <div className="flex flex-col space-y-2 w-full">
+                <button
+                  onClick={summarizeChat}
+                  disabled={isSummarizing || chatHistory.length === 0}
+                  className={`bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl shadow-lg transition-all transform ${isSummarizing || chatHistory.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+                >
+                  {isSummarizing ? 'Summarizing...' : 'Summarize Conversation'}
+                </button>
+                <form onSubmit={askJarvis} className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Ask me anything, sir."
+                    className="flex-grow p-2 rounded-xl bg-gray-100 text-gray-900 border border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    disabled={isGenerating}
+                  />
+                  <button
+                    type="submit"
+                    disabled={isGenerating}
+                    className={`bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl shadow-lg transition-all transform ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+                  >
+                    Send
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
 
-// Load Stopwatch Data on Login
-function loadStopwatchData() {
-    let users = JSON.parse(localStorage.getItem("users"));
-    let data = users[currentUser].stopwatch;
+export default App;
 
-    if (data) {
-        startTime = data.startTime;
-        elapsedTime = data.elapsedTime;
-        running = data.running;
-
-        if (running) {
-            timerInterval = setInterval(updateTime, 1000);
-        }
-        updateTime();
-    }
-}
-
-// Update Save Stopwatch on Start/Stop/Reset
-function startStopwatch() {
-    if (!running) {
-        startTime = Date.now() - elapsedTime;
-        timerInterval = setInterval(updateTime, 1000);
-        running = true;
-        saveStopwatchState(); // Save state
-    }
-}
-
-function pauseStopwatch() {
-    if (running) {
-        clearInterval(timerInterval);
-        running = false;
-        saveStopwatchState(); // Save state
-    }
-}
-
-function resetStopwatch() {
-    clearInterval(timerInterval);
-    running = false;
-    elapsedTime = 0;
-    document.getElementById('time').textContent = "00 Months 00 Days 00:00:00";
-    saveStopwatchState(); // Save state
-}
-    
-    // Function to toggle the visibility of instructions
-function toggleInstructions() {
-    const instructions = document.getElementById('instructions');
-    instructions.style.display = instructions.style.display === 'none' ? 'block' : 'none';
-}
-    
-    // Show loading animation
-window.addEventListener('load', () => {
-    const loadingScreen = document.getElementById('loading-screen');
-    const mainContent = document.getElementById('main-content');
-
-    // Simulate loading delay
-    setTimeout(() => {
-        loadingScreen.style.display = 'none';
-        mainContent.style.display = 'block';
-    }, 3000); // Adjust this to control how long the loading screen appears
-});
-    </script>    
-</body>
-</html>
