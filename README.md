@@ -38,10 +38,10 @@ After a lengthy conversation, you can ask JARVIS to summarize your chat. It will
 
 ## Technical Stack
 
-**Frontend:** React.js
-**Styling:** Tailwind CSS
-**Database:** Google Firebase / Firestore (for persistent timer data)
-**AI Integration:** Google Gemini API (for conversational abilities and TTS)
+- **Frontend:** React.js
+- **Styling:** Tailwind CSS
+- **Database:** Google Firebase / Firestore (for persistent timer data)
+- **AI Integration:** Google Gemini API (for conversational abilities and TTS)
 
 ## Contact
 
