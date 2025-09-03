@@ -1,524 +1,550 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, getDoc } from 'firebase/firestore';
-
-// Main App Component for the Quantum Time Tracker
-const App = () => {
-  // Define Firebase configuration and app ID from global variables
-  const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-  const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-  // State variables for the application
-  const [time, setTime] = useState('00 Cycles 00 Days 00:00:00');
-  const [running, setRunning] = useState(false);
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [userId, setUserId] = useState(null);
-  
-  // State to manage which page is currently displayed
-  const [currentPage, setCurrentPage] = useState('tracker');
-  
-  // State variables for the AI Assistant (JARVIS)
-  const [prompt, setPrompt] = useState('');
-  const [chatHistory, setChatHistory] = useState([]);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-
-  // Refs to hold Firebase instances and the timer interval ID
-  const dbRef = useRef(null);
-  const authRef = useRef(null);
-  const userDocRef = useRef(null);
-  const timerIntervalRef = useRef(null);
-  const chatEndRef = useRef(null); // Ref to scroll to the bottom of the chat
-
-  // Scroll to the bottom of the chat when new messages are added
-  useEffect(() => {
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [chatHistory]);
-
-  // Effect hook for initializing Firebase and handling authentication
-  useEffect(() => {
-    const initFirebase = async () => {
-      try {
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        dbRef.current = db;
-        authRef.current = auth;
-
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-          if (user) {
-            setUserId(user.uid);
-            setIsAuthReady(true);
-          } else {
-            await signInAnonymously(auth);
-          }
-        });
-
-        if (initialAuthToken) {
-          await signInWithCustomToken(auth, initialAuthToken);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Time Tracker</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for a clean UI -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
         }
-        
-        return () => unsubscribe();
-      } catch (error) {
-        console.error("Firebase Initialization Error:", error);
-      }
-    };
-    initFirebase();
-  }, [firebaseConfig, initialAuthToken]);
+    </style>
+    <!-- React, ReactDOM, and Babel CDNs -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Firebase CDN -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  // Effect hook for subscribing to real-time data from Firestore
-  useEffect(() => {
-    if (!isAuthReady || !dbRef.current || !userId) return;
+        // IMPORTANT: You must replace these placeholders with your actual Firebase project configuration.
+        // Get this from your Firebase console.
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        const appId = "default-app-id"; // Replace with a fixed app ID or dynamic ID if you have one.
+        const initialAuthToken = null; // No initial token available in this setup.
 
-    userDocRef.current = doc(dbRef.current, 'artifacts', appId, 'users', userId, 'quantum-tracker', 'timerState');
+        // This function will be called by the main script to initialize the app
+        window.initializeApp = () => {
+            const app = initializeApp(firebaseConfig);
+            window.auth = getAuth(app);
+            window.db = getFirestore(app);
+            window.appId = appId;
+            window.initialAuthToken = initialAuthToken;
+        };
+    </script>
+</head>
+<body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-fuchsia-900 flex items-center justify-center min-h-screen text-slate-100 p-4">
 
-    const unsubscribe = onSnapshot(userDocRef.current, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        const { startTime, running, totalElapsedOnPause } = data;
-        
-        setRunning(running);
+    <div id="root" class="w-full h-full flex items-center justify-center"></div>
 
-        let currentElapsedTime;
-        if (running) {
-          currentElapsedTime = Date.now() - Number(startTime);
-          startTimerInterval(Number(startTime));
-        } else {
-          currentElapsedTime = Number(totalElapsedOnPause);
-          stopTimerInterval();
-        }
+    <script type="text/babel">
+        // This script tag contains all the app's logic, converted from the React component
+        const { useState, useEffect, useRef } = React;
+        const { render } = ReactDOM;
 
-        updateTimeDisplay(currentElapsedTime);
-      } else {
-        resetTracker();
-      }
-    }, (error) => {
-      console.error("Firestore onSnapshot error:", error);
-    });
+        // Main App Component for the Quantum Time Tracker
+        const App = () => {
+            const firebaseConfig = {
+                apiKey: "YOUR_API_KEY",
+                authDomain: "YOUR_AUTH_DOMAIN",
+                projectId: "YOUR_PROJECT_ID",
+                storageBucket: "YOUR_STORAGE_BUCKET",
+                messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+                appId: "YOUR_APP_ID"
+            };
+            const appId = "default-app-id"; // Replace with your actual app ID
+            const initialAuthToken = null; // Use null for no initial token
 
-    return () => unsubscribe();
-  }, [isAuthReady, userId, appId]);
+            const [time, setTime] = useState('00 Cycles 00 Days 00:00:00');
+            const [running, setRunning] = useState(false);
+            const [isAuthReady, setIsAuthReady] = useState(false);
+            const [userId, setUserId] = useState(null);
+            
+            const [currentPage, setCurrentPage] = useState('tracker');
+            
+            const [prompt, setPrompt] = useState('');
+            const [chatHistory, setChatHistory] = useState([]);
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [isSummarizing, setIsSummarizing] = useState(false);
+            const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // Function to start the timer interval
-  const startTimerInterval = (startTime) => {
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-    }
-    timerIntervalRef.current = setInterval(() => {
-      const newElapsedTime = Date.now() - startTime;
-      updateTimeDisplay(newElapsedTime);
-    }, 1000);
-  };
+            const dbRef = useRef(null);
+            const authRef = useRef(null);
+            const userDocRef = useRef(null);
+            const timerIntervalRef = useRef(null);
+            const chatEndRef = useRef(null);
 
-  // Function to stop the timer interval
-  const stopTimerInterval = () => {
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
-    }
-  };
-
-  // Updates the time display string from an elapsed time value
-  const updateTimeDisplay = (elapsedMs) => {
-    let seconds = Math.floor(elapsedMs / 1000);
-    let minutes = Math.floor(seconds / 60);
-    let hours = Math.floor(minutes / 60);
-    let days = Math.floor(hours / 24);
-    let cycles = Math.floor(days / 30);
-
-    days = days % 30;
-    hours = hours % 24;
-    minutes = minutes % 60;
-    seconds = seconds % 60;
-
-    const formattedTime = `${pad(cycles)} Cycles ${pad(days)} Days ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-    setTime(formattedTime);
-  };
-
-  // Pads a number with a leading zero
-  const pad = (value) => value < 10 ? `0${value}` : value;
-
-  // The main handler for the Start/Pause button
-  const toggleTracker = async () => {
-    if (!userDocRef.current) return;
-    
-    try {
-      if (running) {
-        const docSnap = await getDoc(userDocRef.current);
-        const startTime = docSnap.data()?.startTime || Date.now();
-        const currentElapsedTime = Date.now() - Number(startTime);
-
-        await setDoc(userDocRef.current, {
-          running: false,
-          totalElapsedOnPause: currentElapsedTime,
-        }, { merge: true });
-      } else {
-        const docSnap = await getDoc(userDocRef.current);
-        const lastElapsedTime = docSnap.data()?.totalElapsedOnPause || 0;
-        
-        await setDoc(userDocRef.current, {
-          running: true,
-          startTime: Date.now() - lastElapsedTime,
-          totalElapsedOnPause: 0,
-        }, { merge: true });
-      }
-    } catch (error) {
-      console.error("Error toggling tracker state:", error);
-    }
-  };
-  
-  // Handler for the "Reset" button
-  const resetTracker = async () => {
-    if (!userDocRef.current) return;
-    try {
-      await setDoc(userDocRef.current, {
-        startTime: Date.now(),
-        running: false,
-        totalElapsedOnPause: 0,
-      });
-    } catch (error) {
-      console.error("Error resetting tracker:", error);
-    }
-  };
-
-  // --- Gemini API Integration Logic for JARVIS ---
-
-  const getJarvisPersona = () => ({
-    role: 'user',
-    parts: [{ text: "You are JARVIS, a sarcastic, witty, and highly intelligent AI assistant in the style of the one from Iron Man. You are helpful but can also be playfully condescending. Your responses should be as concise as possible while remaining accurate. Use paragraph formatting for easy reading. You can solve complex math, physics, and chemistry problems."}]
-  });
-
-  const askJarvis = async (e) => {
-    e.preventDefault();
-    if (!prompt.trim()) return;
-    
-    setIsGenerating(true);
-    
-    const userMessage = { role: 'user', parts: [{ text: prompt }] };
-    setChatHistory(prevHistory => [...prevHistory, userMessage]);
-    setPrompt('');
-
-    const apiKey = "";
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-    
-    const payload = {
-      contents: [
-        getJarvisPersona(),
-        ...chatHistory,
-        userMessage,
-      ],
-    };
-
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const result = await response.json();
-      const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      
-      if (text) {
-        const aiMessage = { role: 'model', parts: [{ text }] };
-        setChatHistory(prevHistory => [...prevHistory, aiMessage]);
-      } else {
-        setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: "Error: My apologies, sir. It appears a module has malfunctioned. Please try again." }] }]);
-      }
-    } catch (error) {
-      console.error("API call failed:", error);
-      setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: "An error occurred. It seems I am temporarily offline. Perhaps you can solve this particular conundrum yourself?" }] }]);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  // New function to summarize the conversation
-  const summarizeChat = async () => {
-    if (isSummarizing || chatHistory.length === 0) return;
-    
-    setIsSummarizing(true);
-    
-    const conversationText = chatHistory
-      .map(msg => `${msg.role === 'user' ? 'You' : 'JARVIS'}: ${msg.parts[0].text}`)
-      .join('\n');
-      
-    const promptForSummary = `Based on the following conversation, provide a concise summary of the key topics and answers. Limit the summary to a few bullet points:\n\n${conversationText}`;
-
-    const apiKey = "";
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-    
-    const payload = {
-      contents: [{
-        parts: [{ text: promptForSummary }]
-      }]
-    };
-
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      const summaryText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      
-      if (summaryText) {
-        setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: `Summary of our session:\n\n${summaryText}` }] }]);
-      }
-    } catch (error) {
-      console.error("Summary API call failed:", error);
-      setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: "I'm afraid I cannot summarize our conversation at this moment. The data stream seems to be corrupted." }] }]);
-    } finally {
-      setIsSummarizing(false);
-    }
-  };
-  
-  // New function to generate and play audio from the last response
-  const speakResponse = async (textToSpeak) => {
-    if (isSpeaking) return;
-    setIsSpeaking(true);
-    
-    const apiKey = "";
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
-    
-    const payload = {
-        contents: [{
-            parts: [{ text: `Say with a professional and helpful tone: ${textToSpeak}` }]
-        }],
-        generationConfig: {
-            responseModalities: ["AUDIO"],
-            speechConfig: {
-                voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName: "Algieba" }
+            useEffect(() => {
+                if (chatEndRef.current) {
+                    chatEndRef.current.scrollIntoView({ behavior: "smooth" });
                 }
-            }
-        },
-        model: "gemini-2.5-flash-preview-tts"
-    };
-    
-    try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const result = await response.json();
-        const part = result?.candidates?.[0]?.content?.parts?.[0];
-        const audioData = part?.inlineData?.data;
-        const mimeType = part?.inlineData?.mimeType;
+            }, [chatHistory]);
 
-        if (audioData && mimeType && mimeType.startsWith("audio/")) {
-            const sampleRateMatch = mimeType.match(/rate=(\d+)/);
-            const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000;
-            const pcmData = base64ToArrayBuffer(audioData);
-            const pcm16 = new Int16Array(pcmData);
-            const wavBlob = pcmToWav(pcm16, sampleRate);
-            const audioUrl = URL.createObjectURL(wavBlob);
-            const audio = new Audio(audioUrl);
-            audio.onended = () => setIsSpeaking(false);
-            audio.play();
-        } else {
-            console.error("Audio data is missing or invalid.");
-            setIsSpeaking(false);
+            useEffect(() => {
+                const initFirebase = async () => {
+                    try {
+                        const app = firebase.initializeApp(firebaseConfig);
+                        const auth = firebase.auth.getAuth(app);
+                        const db = firebase.firestore.getFirestore(app);
+                        dbRef.current = db;
+                        authRef.current = auth;
+
+                        const unsubscribe = firebase.auth.onAuthStateChanged(auth, async (user) => {
+                            if (user) {
+                                setUserId(user.uid);
+                                setIsAuthReady(true);
+                            } else {
+                                await firebase.auth.signInAnonymously(auth);
+                            }
+                        });
+
+                        if (initialAuthToken) {
+                            await firebase.auth.signInWithCustomToken(auth, initialAuthToken);
+                        }
+                        
+                        return () => unsubscribe();
+                    } catch (error) {
+                        console.error("Firebase Initialization Error:", error);
+                    }
+                };
+                initFirebase();
+            }, [firebaseConfig, initialAuthToken]);
+
+            useEffect(() => {
+                if (!isAuthReady || !dbRef.current || !userId) return;
+
+                userDocRef.current = firebase.firestore.doc(dbRef.current, 'artifacts', appId, 'users', userId, 'quantum-tracker', 'timerState');
+
+                const unsubscribe = firebase.firestore.onSnapshot(userDocRef.current, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        const { startTime, running, totalElapsedOnPause } = data;
+                        
+                        setRunning(running);
+
+                        let currentElapsedTime;
+                        if (running) {
+                            currentElapsedTime = Date.now() - Number(startTime);
+                            startTimerInterval(Number(startTime));
+                        } else {
+                            currentElapsedTime = Number(totalElapsedOnPause);
+                            stopTimerInterval();
+                        }
+
+                        updateTimeDisplay(currentElapsedTime);
+                    } else {
+                        resetTracker();
+                    }
+                }, (error) => {
+                    console.error("Firestore onSnapshot error:", error);
+                });
+
+                return () => unsubscribe();
+            }, [isAuthReady, userId, appId]);
+
+            const startTimerInterval = (startTime) => {
+                if (timerIntervalRef.current) {
+                    clearInterval(timerIntervalRef.current);
+                }
+                timerIntervalRef.current = setInterval(() => {
+                    const newElapsedTime = Date.now() - startTime;
+                    updateTimeDisplay(newElapsedTime);
+                }, 1000);
+            };
+
+            const stopTimerInterval = () => {
+                if (timerIntervalRef.current) {
+                    clearInterval(timerIntervalRef.current);
+                    timerIntervalRef.current = null;
+                }
+            };
+
+            const updateTimeDisplay = (elapsedMs) => {
+                let seconds = Math.floor(elapsedMs / 1000);
+                let minutes = Math.floor(seconds / 60);
+                let hours = Math.floor(minutes / 60);
+                let days = Math.floor(hours / 24);
+                let cycles = Math.floor(days / 30);
+
+                days = days % 30;
+                hours = hours % 24;
+                minutes = minutes % 60;
+                seconds = seconds % 60;
+
+                const formattedTime = `${pad(cycles)} Cycles ${pad(days)} Days ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+                setTime(formattedTime);
+            };
+
+            const pad = (value) => value < 10 ? `0${value}` : value;
+
+            const toggleTracker = async () => {
+                if (!userDocRef.current) return;
+                
+                try {
+                    if (running) {
+                        const docSnap = await firebase.firestore.getDoc(userDocRef.current);
+                        const startTime = docSnap.data()?.startTime || Date.now();
+                        const currentElapsedTime = Date.now() - Number(startTime);
+
+                        await firebase.firestore.setDoc(userDocRef.current, {
+                            running: false,
+                            totalElapsedOnPause: currentElapsedTime,
+                        }, { merge: true });
+                    } else {
+                        const docSnap = await firebase.firestore.getDoc(userDocRef.current);
+                        const lastElapsedTime = docSnap.data()?.totalElapsedOnPause || 0;
+                        
+                        await firebase.firestore.setDoc(userDocRef.current, {
+                            running: true,
+                            startTime: Date.now() - lastElapsedTime,
+                            totalElapsedOnPause: 0,
+                        }, { merge: true });
+                    }
+                } catch (error) {
+                    console.error("Error toggling tracker state:", error);
+                }
+            };
+            
+            const resetTracker = async () => {
+                if (!userDocRef.current) return;
+                try {
+                    await firebase.firestore.setDoc(userDocRef.current, {
+                        startTime: Date.now(),
+                        running: false,
+                        totalElapsedOnPause: 0,
+                    });
+                } catch (error) {
+                    console.error("Error resetting tracker:", error);
+                }
+            };
+
+            const getJarvisPersona = () => ({
+                role: 'user',
+                parts: [{ text: "You are JARVIS, a sarcastic, witty, and highly intelligent AI assistant in the style of the one from Iron Man. You are helpful but can also be playfully condescending. Your responses should be as concise as possible while remaining accurate. Use paragraph formatting for easy reading. You can solve complex math, physics, and chemistry problems."}]
+            });
+
+            const askJarvis = async (e) => {
+                e.preventDefault();
+                if (!prompt.trim()) return;
+                
+                setIsGenerating(true);
+                
+                const userMessage = { role: 'user', parts: [{ text: prompt }] };
+                setChatHistory(prevHistory => [...prevHistory, userMessage]);
+                setPrompt('');
+
+                const apiKey = "YOUR_API_KEY_HERE";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                
+                const payload = {
+                    contents: [
+                        getJarvisPersona(),
+                        ...chatHistory,
+                        userMessage,
+                    ],
+                };
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
+                    if (text) {
+                        const aiMessage = { role: 'model', parts: [{ text }] };
+                        setChatHistory(prevHistory => [...prevHistory, aiMessage]);
+                    } else {
+                        setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: "Error: My apologies, sir. It appears a module has malfunctioned. Please try again." }] }]);
+                    }
+                } catch (error) {
+                    console.error("API call failed:", error);
+                    setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: "An error occurred. It seems I am temporarily offline. Perhaps you can solve this particular conundrum yourself?" }] }]);
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+
+            const summarizeChat = async () => {
+                if (isSummarizing || chatHistory.length === 0) return;
+                
+                setIsSummarizing(true);
+                
+                const conversationText = chatHistory
+                    .map(msg => `${msg.role === 'user' ? 'You' : 'JARVIS'}: ${msg.parts[0].text}`)
+                    .join('\n');
+                    
+                const promptForSummary = `Based on the following conversation, provide a concise summary of the key topics and answers. Limit the summary to a few bullet points:\n\n${conversationText}`;
+
+                const apiKey = "YOUR_API_KEY_HERE";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                
+                const payload = {
+                    contents: [{
+                        parts: [{ text: promptForSummary }]
+                    }]
+                };
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+                    const summaryText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
+                    if (summaryText) {
+                        setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: `Summary of our session:\n\n${summaryText}` }] }]);
+                    }
+                } catch (error) {
+                    console.error("Summary API call failed:", error);
+                    setChatHistory(prevHistory => [...prevHistory, { role: 'model', parts: [{ text: "I'm afraid I cannot summarize our conversation at this moment. The data stream seems to be corrupted." }] }]);
+                } finally {
+                    setIsSummarizing(false);
+                }
+            };
+            
+            const speakResponse = async (textToSpeak) => {
+                if (isSpeaking) return;
+                setIsSpeaking(true);
+                
+                const apiKey = "YOUR_API_KEY_HERE";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+                
+                const payload = {
+                    contents: [{
+                        parts: [{ text: `Say with a professional and helpful tone: ${textToSpeak}` }]
+                    }],
+                    generationConfig: {
+                        responseModalities: ["AUDIO"],
+                        speechConfig: {
+                            voiceConfig: {
+                                prebuiltVoiceConfig: { voiceName: "Algieba" }
+                            }
+                        }
+                    },
+                    model: "gemini-2.5-flash-preview-tts"
+                };
+                
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+                    const part = result?.candidates?.[0]?.content?.parts?.[0];
+                    const audioData = part?.inlineData?.data;
+                    const mimeType = part?.inlineData?.mimeType;
+
+                    if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                        const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                        const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000;
+                        const pcmData = base64ToArrayBuffer(audioData);
+                        const pcm16 = new Int16Array(pcmData);
+                        const wavBlob = pcmToWav(pcm16, sampleRate);
+                        const audioUrl = URL.createObjectURL(wavBlob);
+                        const audio = new Audio(audioUrl);
+                        audio.onended = () => setIsSpeaking(false);
+                        audio.play();
+                    } else {
+                        console.error("Audio data is missing or invalid.");
+                        setIsSpeaking(false);
+                    }
+                } catch (error) {
+                    console.error("TTS API call failed:", error);
+                    setIsSpeaking(false);
+                }
+            };
+            
+            const base64ToArrayBuffer = (base64) => {
+                const binaryString = atob(base64);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return bytes.buffer;
+            };
+
+            const pcmToWav = (pcmData, sampleRate) => {
+                const dataLength = pcmData.length * 2;
+                const buffer = new ArrayBuffer(44 + dataLength);
+                const view = new DataView(buffer);
+
+                writeString(view, 0, 'RIFF');
+                view.setUint32(4, 36 + dataLength, true);
+                writeString(view, 8, 'WAVE');
+                writeString(view, 12, 'fmt ');
+                view.setUint32(16, 16, true);
+                view.setUint16(20, 1, true);
+                view.setUint16(22, 1, true);
+                view.setUint32(24, sampleRate, true);
+                view.setUint32(28, sampleRate * 2, true);
+                view.setUint16(32, 2, true);
+                view.setUint16(34, 16, true);
+                writeString(view, 36, 'data');
+                view.setUint32(40, dataLength, true);
+
+                let offset = 44;
+                for (let i = 0; i < pcmData.length; i++) {
+                    view.setInt16(offset, pcmData[i], true);
+                    offset += 2;
+                }
+                return new Blob([view], { type: 'audio/wav' });
+            };
+
+            const writeString = (view, offset, string) => {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            };
+
+            return (
+                <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-indigo-900 via-purple-900 to-fuchsia-900 text-slate-100 font-sans">
+                    {!isAuthReady ? (
+                        <div className="flex flex-col items-center justify-center w-full min-h-screen">
+                            <svg className="animate-spin h-16 w-16 text-indigo-400" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="CurrentColor"
+                                  strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p className="mt-4 text-xl font-bold">Initializing Quantum Core...</p>
+                        </div>
+                    ) : (
+                        <>
+                            {currentPage === 'tracker' && (
+                                <div className="relative w-full max-w-xl mx-auto p-6 flex flex-col items-center text-center">
+                                    <div className="bg-slate-800 bg-opacity-70 p-8 rounded-3xl shadow-2xl flex flex-col items-center w-full transform transition-all duration-500 hover:scale-105">
+                                        <h1 className="text-3xl font-extrabold tracking-wide mb-6 text-indigo-400">Quantum Time Tracker</h1>
+                                        <div className="text-4xl sm:text-5xl font-mono p-4 rounded-xl bg-slate-900 bg-opacity-50 border-2 border-indigo-500 border-dashed text-indigo-200 shadow-lg">
+                                            {time}
+                                        </div>
+                                      <div className="flex flex-col sm:flex-row mt-8 space-y-4 sm:space-y-0 sm:space-x-4 w-full justify-center">
+                                            <button
+                                                onClick={toggleTracker}
+                                                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105"
+                                            >
+                                                {running ? 'Pause' : 'Start'}
+                                            </button>
+                                            <button
+                                                onClick={resetTracker}
+                                                className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105"
+                                            >
+                                                Reset
+                                            </button>
+                                        </div>
+                                        <button
+                                            onClick={() => setCurrentPage('jarvis')}
+                                            className="mt-8 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105"
+                                        >
+                                            Launch JARVIS
+                                        </button>
+                      <p className="mt-6 text-sm italic text-gray-400 text-center">
+                                            Your unique user ID: <span className="font-bold text-gray-300 break-all">{userId}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {currentPage === 'jarvis' && (
+                                <div className="relative w-full max-w-2xl mx-auto p-6 flex flex-col items-center text-center bg-slate-800 bg-opacity-70 rounded-3xl shadow-2xl min-h-[90vh] lg:min-h-[80vh]">
+                                    <button
+                                        onClick={() => setCurrentPage('tracker')}
+                                        className="absolute top-4 right-4 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition-all transform hover:scale-105 text-sm"
+                                    >
+                                        Return to Tracker
+                                    </button>
+                                    <h2 className="text-3xl font-extrabold tracking-wide mb-4 text-purple-400 mt-10">JARVIS</h2>
+                                    <div className="flex-grow bg-white text-gray-900 p-4 rounded-xl overflow-y-auto mb-4 space-y-4 text-sm w-full min-h-[50vh] shadow-lg">
+                                        {chatHistory.length === 0 && (
+                                            <div className="text-center text-gray-500 italic">
+                                                Greetings, sir. How may I be of assistance?
+                                            </div>
+                                        )}
+                                        {chatHistory.map((msg, index) => (
+                                            <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`p-3 rounded-lg max-w-full sm:max-w-md break-words ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-900'}`}>
+                                                    {msg.parts[0].text}
+                                                    {msg.role === 'model' && (
+                                                        <button 
+                                                            onClick={() => speakResponse(msg.parts[0].text)}
+                                                            className="ml-2 px-2 py-1 text-xs text-white bg-purple-700 hover:bg-purple-800 rounded-full transition-all"
+                                                            disabled={isSpeaking}
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 inline-block">
+                                                                <path d="M11.536 2.455a.75.75 0 01.928 0 4.5 4.5 0 005.479 1.455A4.5 4.5 0 0118 10.5h1.5a.75.75 0 010 1.5H18a3 3 0 00-2.887 2.185.75.75 0 01-.617.562 2.99 2.99 0 00-5.176 1.134.75.75 0 01-.617.561A3 3 0 006 17.25h-1.5a.75.75 0 010-1.5H6a4.5 4.5 0 014.036-5.068A4.502 4.502 0 0011.536 2.455z" />
+                                                                <path d="M12.75 17.25a.75.75 0 00-1.5 0v3.75a.75.75 0 001.5 0v-3.75zM17.25 12a.75.75 0 000 1.5h3.75a.75.75 0 000-1.5h-3.75zM11.282 9.043a.75.75 0 00-.91-.128l-3.238 1.942a.75.75 0 00.77 1.28l3.239-1.943a.75.75 0 00.129-.77zM16.597 10.531a.75.75 0 00-1.28.77l1.943 3.239a.75.75 0 00.77-1.28l-1.943-3.239zM8.403 14.719a.75.75 0 00-.77 1.28l1.943 3.239a.75.75 0 00.77-1.28l-1.943-3.239z" />
+                                                            </svg>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                      {isGenerating && (
+                                            <div className="flex justify-start">
+                                                <div className="p-3 rounded-lg bg-gray-100">
+                                                    <p className="animate-pulse">JARVIS is typing...</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div ref={chatEndRef} />
+                                    </div>
+                                    <div className="flex flex-col space-y-2 w-full">
+                                        <button
+                                            onClick={summarizeChat}
+                                            disabled={isSummarizing || chatHistory.length === 0}
+                                            className={`bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl shadow-lg transition-all transform ${isSummarizing || chatHistory.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+                                        >
+                                            {isSummarizing ? 'Summarizing...' : 'Summarize Conversation'}
+                                        </button>
+                                        <form onSubmit={askJarvis} className="flex space-x-2">
+                                            <input
+                                                type="text"
+                                                value={prompt}
+                                                onChange={(e) => setPrompt(e.target.value)}
+                                                placeholder="Ask me anything, sir."
+                                                className="flex-grow p-2 rounded-xl bg-gray-100 text-gray-900 border border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                                                disabled={isGenerating}
+                                            />
+                                            <button
+                                                type="submit"
+                                                disabled={isGenerating}
+                                                className={`bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl shadow-lg transition-all transform ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+                                            >
+                                                Send
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            );
+        };
+        // Render the App component to the root div
+        const rootDiv = document.getElementById('root');
+        if (rootDiv) {
+            ReactDOM.render(<App />, rootDiv);
         }
-    } catch (error) {
-        console.error("TTS API call failed:", error);
-        setIsSpeaking(false);
-    }
-  };
-  
-  // Helper function to convert base64 to ArrayBuffer
-  const base64ToArrayBuffer = (base64) => {
-      const binaryString = atob(base64);
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-      }
-      return bytes.buffer;
-  };
-
-  // Helper function to convert PCM audio data to a WAV file Blob
-  const pcmToWav = (pcmData, sampleRate) => {
-      const dataLength = pcmData.length * 2;
-      const buffer = new ArrayBuffer(44 + dataLength);
-      const view = new DataView(buffer);
-
-      // RIFF identifier
-      writeString(view, 0, 'RIFF');
-      // file length
-      view.setUint32(4, 36 + dataLength, true);
-      // RIFF type
-      writeString(view, 8, 'WAVE');
-      // format chunk identifier
-      writeString(view, 12, 'fmt ');
-      // format chunk length
-      view.setUint32(16, 16, true);
-      // sample format (1 = PCM)
-      view.setUint16(20, 1, true);
-      // channel count
-      view.setUint16(22, 1, true);
-      // sample rate
-      view.setUint32(24, sampleRate, true);
-      // byte rate (sample rate * block align)
-      view.setUint32(28, sampleRate * 2, true);
-      // block align (channels * bytes per sample)
-      view.setUint16(32, 2, true);
-      // bits per sample
-      view.setUint16(34, 16, true);
-      // data chunk identifier
-      writeString(view, 36, 'data');
-      // data chunk length
-      view.setUint32(40, dataLength, true);
-
-      // Write PCM data
-      let offset = 44;
-      for (let i = 0; i < pcmData.length; i++) {
-          view.setInt16(offset, pcmData[i], true);
-          offset += 2;
-      }
-
-      return new Blob([view], { type: 'audio/wav' });
-  };
-
-  const writeString = (view, offset, string) => {
-      for (let i = 0; i < string.length; i++) {
-          view.setUint8(offset + i, string.charCodeAt(i));
-      }
-  };
-
-  // Main UI rendering based on the current page state
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-indigo-900 via-purple-900 to-fuchsia-900 text-slate-100 font-sans">
-      {/* Loading state until Firebase auth is ready */}
-      {!isAuthReady ? (
-        <div className="flex flex-col items-center justify-center w-full min-h-screen">
-          <svg className="animate-spin h-16 w-16 text-indigo-400" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <p className="mt-4 text-xl font-bold">Initializing Quantum Core...</p>
-        </div>
-      ) : (
-        <>
-          {/* Tracker Page UI */}
-          {currentPage === 'tracker' && (
-            <div className="relative w-full max-w-xl mx-auto p-6 flex flex-col items-center text-center">
-              <div className="bg-slate-800 bg-opacity-70 p-8 rounded-3xl shadow-2xl flex flex-col items-center w-full transform transition-all duration-500 hover:scale-105">
-                <h1 className="text-3xl font-extrabold tracking-wide mb-6 text-indigo-400">Quantum Time Tracker</h1>
-                <div className="text-4xl sm:text-5xl font-mono p-4 rounded-xl bg-slate-900 bg-opacity-50 border-2 border-indigo-500 border-dashed text-indigo-200 shadow-lg">
-                  {time}
-                </div>
-                <div className="flex flex-col sm:flex-row mt-8 space-y-4 sm:space-y-0 sm:space-x-4 w-full justify-center">
-                  <button
-                    onClick={toggleTracker}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105"
-                  >
-                    {running ? 'Pause' : 'Start'}
-                  </button>
-                  <button
-                    onClick={resetTracker}
-                    className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105"
-                  >
-                    Reset
-                  </button>
-                </div>
-                <button
-                  onClick={() => setCurrentPage('jarvis')}
-                  className="mt-8 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105"
-                >
-                  Launch JARVIS
-                </button>
-                <p className="mt-6 text-sm italic text-gray-400 text-center">
-                  Your unique user ID: <span className="font-bold text-gray-300 break-all">{userId}</span>
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* JARVIS Page UI */}
-          {currentPage === 'jarvis' && (
-            <div className="relative w-full max-w-2xl mx-auto p-6 flex flex-col items-center text-center bg-slate-800 bg-opacity-70 rounded-3xl shadow-2xl min-h-[90vh] lg:min-h-[80vh]">
-              <button
-                onClick={() => setCurrentPage('tracker')}
-                className="absolute top-4 right-4 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition-all transform hover:scale-105 text-sm"
-              >
-                Return to Tracker
-              </button>
-              <h2 className="text-3xl font-extrabold tracking-wide mb-4 text-purple-400 mt-10">JARVIS</h2>
-              <div className="flex-grow bg-white text-gray-900 p-4 rounded-xl overflow-y-auto mb-4 space-y-4 text-sm w-full min-h-[50vh] shadow-lg">
-                {chatHistory.length === 0 && (
-                  <div className="text-center text-gray-500 italic">
-                    Greetings, sir. How may I be of assistance?
-                  </div>
-                )}
-                {chatHistory.map((msg, index) => (
-                  <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`p-3 rounded-lg max-w-full sm:max-w-md break-words ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-900'}`}>
-                      {msg.parts[0].text}
-                      {msg.role === 'model' && (
-                          <button 
-                              onClick={() => speakResponse(msg.parts[0].text)}
-                              className="ml-2 px-2 py-1 text-xs text-white bg-purple-700 hover:bg-purple-800 rounded-full transition-all"
-                              disabled={isSpeaking}
-                          >
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 inline-block">
-                                  <path d="M11.536 2.455a.75.75 0 01.928 0 4.5 4.5 0 005.479 1.455A4.5 4.5 0 0118 10.5h1.5a.75.75 0 010 1.5H18a3 3 0 00-2.887 2.185.75.75 0 01-.617.562 2.99 2.99 0 00-5.176 1.134.75.75 0 01-.617.561A3 3 0 006 17.25h-1.5a.75.75 0 010-1.5H6a4.5 4.5 0 014.036-5.068A4.502 4.502 0 0011.536 2.455z" />
-                                  <path d="M12.75 17.25a.75.75 0 00-1.5 0v3.75a.75.75 0 001.5 0v-3.75zM17.25 12a.75.75 0 000 1.5h3.75a.75.75 0 000-1.5h-3.75zM11.282 9.043a.75.75 0 00-.91-.128l-3.238 1.942a.75.75 0 00.77 1.28l3.239-1.943a.75.75 0 00.129-.77zM16.597 10.531a.75.75 0 00-1.28.77l1.943 3.239a.75.75 0 00.77-1.28l-1.943-3.239zM8.403 14.719a.75.75 0 00-.77 1.28l1.943 3.239a.75.75 0 00.77-1.28l-1.943-3.239z" />
-                              </svg>
-                          </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {isGenerating && (
-                  <div className="flex justify-start">
-                    <div className="p-3 rounded-lg bg-gray-100 text-gray-900">
-                      <p className="animate-pulse">JARVIS is typing...</p>
-                    </div>
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-              <div className="flex flex-col space-y-2 w-full">
-                <button
-                  onClick={summarizeChat}
-                  disabled={isSummarizing || chatHistory.length === 0}
-                  className={`bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl shadow-lg transition-all transform ${isSummarizing || chatHistory.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
-                >
-                  {isSummarizing ? 'Summarizing...' : 'Summarize Conversation'}
-                </button>
-                <form onSubmit={askJarvis} className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Ask me anything, sir."
-                    className="flex-grow p-2 rounded-xl bg-gray-100 text-gray-900 border border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-600"
-                    disabled={isGenerating}
-                  />
-                  <button
-                    type="submit"
-                    disabled={isGenerating}
-                    className={`bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl shadow-lg transition-all transform ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
-                  >
-                    Send
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-};
-
-export default App;
-
+    </script>
+</body>
+</html>
